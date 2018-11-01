@@ -7,4 +7,4 @@ specific LDAP attributes for Library employees
 
 ### Docker
 1. Build docker image `docker build -t ldap_sync:latest .`
-1. Run image `docker run --rm ldap_sync sh -c "bin/ruby sync.rb"`
+1. Run image `docker run --rm ldap_sync sh -c "ruby sync.rb"`
