@@ -2,13 +2,44 @@ require 'bundler/inline'
 
 gemfile do
   source 'https://rubygems.org'
-  gem 'ibm_db'
+  ruby '2.5.3'
+  gem 'ibm_db', '~> 4.0.0'
+  gem 'net-ldap', '~> 0.16.1'
+  gem 'rails', '5.1.6'
 end
 
 require 'rubygems'
 require 'ibm_db'
+require 'net/ldap'
 
 class User
+  def sync_employees
+    db_connection
+
+    if @conn
+      begin
+        if stmt = IBM_DB.exec(@conn, query)
+          while row = IBM_DB.fetch_assoc(stmt)
+            update_manager(row)
+          end
+          IBM_DB.free_result(stmt)
+        else
+          puts "Statement execution failed: #{IBM_DB.stmt_errormsg}"
+        end
+        ensure
+          IBM_DB.close(@conn)
+      end
+    else
+      puts "There was an error in the connection: #{IBM_DB.conn_errormsg}"
+    end
+  end
+
+  def db_connection
+    @conn ||= IBM_DB.connect("DRIVER={IBM DB2 ODBC DRIVER};DATABASE=dw_db;\
+                       HOSTNAME=#{ENV['DB2_HOST']};PORT=55000;PROTOCOL=TCPIP;\
+                       UID=#{ENV['DB2_USERNAME']};PWD=#{ENV['DB2_PASSWORD']};", "", "")
+  end
+
   def ad_user_name(user_name, email)
     email_arr = email.split('@')
     name =  (email_arr.first.length > 8 && email.include?(user_name)) ? email_arr.first : user_name
@@ -24,27 +55,33 @@ class User
     'ORDER BY USERNAME'.freeze
   end
 
-  def employee_manager_data
-    conn = IBM_DB.connect("DRIVER={IBM DB2 ODBC DRIVER};DATABASE=dw_db;\
-                       HOSTNAME=xxx.ucsd.edu;PORT=55000;PROTOCOL=TCPIP;\
-                       UID=xxx;PWD=xxx;", "", "")
-    if conn
-      begin
-        if stmt = IBM_DB.exec(conn, query)
-          while row = IBM_DB.fetch_assoc(stmt)
-            puts "EmployeeAD: #{ad_user_name(row['USERNAME'],row['USEREMAIL'])} - ManagerAD: #{ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL'])}"
-          end
-          IBM_DB.free_result(stmt)
-        else
-          puts "Statement execution failed: #{IBM_DB.stmt_errormsg}"
-        end
-        ensure
-          IBM_DB.close(conn)
-      end
-    else
-      puts "There was an error in the connection: #{IBM_DB.conn_errormsg}"
-    end
+  def ldap_connection
+    @ldap_connection ||= Net::LDAP.new(
+      host: ENV['LDAP_HOST'],
+      port: ENV['LDAP_PORT'],
+      base: ENV['LDAP_BASE'],
+      encryption: { method: :simple_tls },
+      auth: {
+          method: :simple,
+          username: ENV['LDAP_USERNAME'],
+          password: ENV['LDAP_PASSWORD']
+      }
+    )
+  end
+
+  def validate_ldap_response
+    msg = <<~MESSAGE
+      Response Code: ldap_connection.get_operation_result.code
+      Message: ldap_connection.get_operation_result.message
+    MESSAGE
+    raise msg unless ldap_connection.get_operation_result.code.zero?
+  end
+
+  def update_manager(row)
+    dn = "CN=#{ad_user_name(row['USERNAME'],row['USEREMAIL'])}"
+    ldap_connection.replace_attribute dn, :manager, ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL'])
+    validate_ldap_response
   end
 end
 
-puts "hello world #{User.new.employee_manager_data}"
+User.new.sync_employees
