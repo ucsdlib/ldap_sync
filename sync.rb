@@ -78,7 +78,6 @@ class User
   end
 
   def update_manager(row)
-    # puts "EmployeeAD: #{ad_user_name(row['USERNAME'],row['USEREMAIL'])} - ManagerAD: #{ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL'])}"    
     dn = "CN=#{ad_user_name(row['USERNAME'],row['USEREMAIL'])}"
     ldap_connection.replace_attribute dn, :manager, ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL'])
     validate_ldap_response
