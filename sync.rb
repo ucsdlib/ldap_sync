@@ -41,8 +41,8 @@ class User
   end
 
   def ad_user_name(user_name, email)
-    email_arr = email.split('@')
-    name =  (email_arr.first.length > 8 && email.include?(user_name)) ? email_arr.first : user_name
+    email_arr = email.strip.split('@')
+    name =  (email_arr.first.length > 8 && email.include?(user_name.strip)) ? email_arr.first : user_name.strip
     name
   end
 
@@ -71,16 +71,33 @@ class User
 
   def validate_ldap_response
     msg = <<~MESSAGE
-      Response Code: ldap_connection.get_operation_result.code
-      Message: ldap_connection.get_operation_result.message
+      Response Code: @ldap_connection.get_operation_result.code
+      Message: @ldap_connection.get_operation_result.message
     MESSAGE
     raise msg unless ldap_connection.get_operation_result.code.zero?
   end
 
   def update_manager(row)
-    dn = "CN=#{ad_user_name(row['USERNAME'],row['USEREMAIL'])}"
-    ldap_connection.replace_attribute dn, :manager, ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL'])
+    ldap_connection
+    if @ldap_connection
+      emp_dn = employee_dn(ad_user_name(row['USERNAME'],row['USEREMAIL']))
+      manager_dn = employee_dn(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
+      @ldap_connection.replace_attribute emp_dn, :manager, manager_dn if emp_dn && manager_dn
+      validate_ldap_response
+    end
+  end
+
+  def employee_dn (uid)
+    dn = nil
+    @ldap_connection.search(
+      filter: Net::LDAP::Filter.eq('CN', uid),
+      return_result: false,
+      attributes: %w[DisplayName CN mail manager givenName sn Thumbnailphoto]
+    ) do |employee|
+      dn = employee.dn.to_s
+    end
     validate_ldap_response
+    dn
   end
 end
 
