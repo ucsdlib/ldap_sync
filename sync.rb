@@ -15,13 +15,15 @@ require 'net/ldap'
 class User
   def sync_employees
     db_connection
-
+    ldap_connection
+    @employees = Hash.new
     if @conn
       begin
         if stmt = IBM_DB.exec(@conn, query)
           while row = IBM_DB.fetch_assoc(stmt)
-            update_manager(row)
-          end
+            update_manager(row) if @ldap_connection
+          end      
+
           IBM_DB.free_result(stmt)
         else
           puts "Statement execution failed: #{IBM_DB.stmt_errormsg}"
@@ -52,7 +54,7 @@ class User
     'from ROLES.SUPERVISOR_DEPART_VIEW R LEFT OUTER JOIN AFFILIATES_DW.AFFILIATES_SAFE_ATTRIBUTES A ' \
     'ON R.EMP_PERSON_ID = A.emb_person_id, AFFILIATES_DW.AFFILIATES_SAFE_ATTRIBUTES A2 ' \
     'where R.ACTIVE = 1 and R.ROLE_NAME = \'ER_SUPERVISOR\' AND A2.emb_person_id = R.SUP_PERSON_ID ' \
-    'ORDER BY USERNAME'.freeze
+    'ORDER BY USERNAME, ASSIGN_DATE DESC'.freeze
   end
 
   def ldap_connection
@@ -78,26 +80,33 @@ class User
   end
 
   def update_manager(row)
-    ldap_connection
-    if @ldap_connection
-      emp_dn = employee_dn(ad_user_name(row['USERNAME'],row['USEREMAIL']))
-      manager_dn = employee_dn(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
-      @ldap_connection.replace_attribute emp_dn, :manager, manager_dn if emp_dn && manager_dn
-      validate_ldap_response
+    username = row['USERNAME'].strip
+    if (!@employees.has_key?(username))
+      @employees[username] = row
+      emp = employee(ad_user_name(row['USERNAME'],row['USEREMAIL']))
+      if (!manager_match?(emp.manager,row['MANAGERADNAME']))
+        manager_obj = employee(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
+        @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn if emp && manager_obj
+        validate_ldap_response
+      end
     end
   end
 
-  def employee_dn (uid)
-    dn = nil
+  def employee (uid)
+    emp_obj = nil
     @ldap_connection.search(
       filter: Net::LDAP::Filter.eq('CN', uid),
       return_result: false,
       attributes: %w[DisplayName CN mail manager givenName sn Thumbnailphoto]
     ) do |employee|
-      dn = employee.dn.to_s
+      emp_obj = employee
     end
     validate_ldap_response
-    dn
+    emp_obj
+  end
+
+  def manager_match? (manager_dn, manager_ad)
+    manager_dn.first.to_s.include?(manager_ad.strip)
   end
 end
 
