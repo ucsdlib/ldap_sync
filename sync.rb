@@ -21,9 +21,8 @@ class User
       begin
         if stmt = IBM_DB.exec(@conn, query)
           while row = IBM_DB.fetch_assoc(stmt)
-            update_manager(row) if @ldap_connection
-          end      
-
+            update_manager(row)
+          end 
           IBM_DB.free_result(stmt)
         else
           puts "Statement execution failed: #{IBM_DB.stmt_errormsg}"
@@ -84,10 +83,13 @@ class User
     if (!@employees.has_key?(username))
       @employees[username] = row
       emp = employee(ad_user_name(row['USERNAME'],row['USEREMAIL']))
-      if (!manager_match?(emp.manager,row['MANAGERADNAME']))
+      if (emp && !manager_match?(emp,row['MANAGERADNAME']))
         manager_obj = employee(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
-        @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn if emp && manager_obj
-        validate_ldap_response
+        if manager_obj
+          @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn
+          puts "Employee: #{username} - Manager: #{manager_obj.dn}"
+          validate_ldap_response
+        end
       end
     end
   end
@@ -97,7 +99,7 @@ class User
     @ldap_connection.search(
       filter: Net::LDAP::Filter.eq('CN', uid),
       return_result: false,
-      attributes: %w[DisplayName CN mail manager givenName sn Thumbnailphoto]
+      attributes: %w[DisplayName CN mail manager givenName sn]
     ) do |employee|
       emp_obj = employee
     end
@@ -105,8 +107,9 @@ class User
     emp_obj
   end
 
-  def manager_match? (manager_dn, manager_ad)
-    manager_dn.first.to_s.include?(manager_ad.strip)
+  def manager_match? (emp_obj, manager_ad)
+    return false unless emp_obj && defined?(emp_obj.manager)
+    emp_obj.manager.first.to_s.include?(manager_ad.strip)
   end
 end
 
