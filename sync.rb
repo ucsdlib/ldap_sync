@@ -16,7 +16,7 @@ class User
   def sync_employees
     db_connection
     ldap_connection
-    @employees = Hash.new
+    @employees = Array.new
     if @conn
       begin
         if stmt = IBM_DB.exec(@conn, query)
@@ -41,6 +41,8 @@ class User
                        UID=#{ENV['DB2_USERNAME']};PWD=#{ENV['DB2_PASSWORD']};", "", "")
   end
 
+  # The campus system truncates username to 8 characters.
+  # We use email value as AdUserName for truncated username.
   def ad_user_name(user_name, email)
     email_arr = email.strip.split('@')
     name =  (email_arr.first.length > 8 && email.include?(user_name.strip)) ? email_arr.first : user_name.strip
@@ -79,18 +81,14 @@ class User
   end
 
   def update_manager(row)
-    username = row['USERNAME'].strip
-    if (!@employees.has_key?(username))
-      @employees[username] = row
-      emp = employee(ad_user_name(row['USERNAME'],row['USEREMAIL']))
-      if (emp && !manager_match?(emp,row['MANAGERADNAME']))
-        manager_obj = employee(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
-        if manager_obj
-          @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn
-          puts "Employee: #{username} - Manager: #{manager_obj.dn}"
-          validate_ldap_response
-        end
-      end
+    return unless !@employees.include?(row['USERNAME'].strip)
+    @employees << row['USERNAME'].strip
+    emp = employee(ad_user_name(row['USERNAME'],row['USEREMAIL']))
+    if (emp && !manager_match?(emp,row['MANAGERADNAME']))
+      manager_obj = employee(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
+      puts "Employee: #{row['USERNAME']} - Change Manager from #{emp.manager} to #{manager_obj.dn} - whenChanged: #{emp.whenChanged}"
+      @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn if manager_obj
+      validate_ldap_response
     end
   end
 
@@ -99,7 +97,7 @@ class User
     @ldap_connection.search(
       filter: Net::LDAP::Filter.eq('CN', uid),
       return_result: false,
-      attributes: %w[DisplayName CN mail manager givenName sn]
+      attributes: %w[DisplayName CN mail manager givenName whenChanged]
     ) do |employee|
       emp_obj = employee
     end
@@ -108,7 +106,7 @@ class User
   end
 
   def manager_match? (emp_obj, manager_ad)
-    return false unless emp_obj && defined?(emp_obj.manager)
+    return false unless defined?(emp_obj.manager)
     emp_obj.manager.first.to_s.include?(manager_ad.strip)
   end
 end
