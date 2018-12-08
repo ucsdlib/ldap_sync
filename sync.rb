@@ -106,7 +106,7 @@ class User
   end
 
   def manager_match? (emp_obj, manager_ad)
-    return false unless defined?(emp_obj.manager)
+    return false unless emp_obj.respond_to?(:manager)
     emp_obj.manager.first.to_s.include?(manager_ad.strip)
   end
 end
