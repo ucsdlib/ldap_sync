@@ -86,9 +86,11 @@ class User
     emp = employee(ad_user_name(row['USERNAME'],row['USEREMAIL']))
     if (emp && !manager_match?(emp,row['MANAGERADNAME']))
       manager_obj = employee(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
-      puts "Employee: #{row['USERNAME']} - Change Manager to #{row['MANAGERADNAME']} - whenChanged: #{emp.whenChanged}"
-      @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn if manager_obj
-      validate_ldap_response
+      if manager_obj
+        puts "Employee: #{row['USERNAME']} - Change Manager to #{row['MANAGERADNAME']} - whenChanged: #{emp.whenChanged}"
+        @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn
+        validate_ldap_response
+      end
     end
   end
 
