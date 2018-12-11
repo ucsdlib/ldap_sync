@@ -5,17 +5,20 @@ require 'rubygems'
 require 'ibm_db'
 require 'net/ldap'
 require 'time'
+require 'optparse'
+require 'ostruct'
 
 class User
   def sync_employees
     db_connection
     ldap_connection
     @employees = Array.new
+    update_opt = update?
     if @conn
       begin
         if stmt = IBM_DB.exec(@conn, query)
           while row = IBM_DB.fetch_assoc(stmt)
-            update_manager(row)
+            update_manager(row, update_opt)
           end
           IBM_DB.free_result(stmt)
         else
@@ -74,7 +77,7 @@ class User
     raise msg unless ldap_connection.get_operation_result.code.zero?
   end
 
-  def update_manager(row)
+  def update_manager(row, update_opt)
     return unless !@employees.include?(row['USERNAME'].strip)
     @employees << row['USERNAME'].strip
     emp = employee(ad_user_name(row['USERNAME'],row['USEREMAIL']))
@@ -82,7 +85,7 @@ class User
       manager_obj = employee(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
       if manager_obj
         puts "#{Time.now} - Employee: #{row['USERNAME']} - Change Manager to #{row['MANAGERADNAME']} - whenChanged: #{emp.whenChanged}"
-        @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn
+        @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn if update_opt
         validate_ldap_response
       end
     end
@@ -103,7 +106,16 @@ class User
 
   def manager_match? (emp_obj, manager_ad)
     return false unless emp_obj.respond_to?(:manager)
-    emp_obj.manager.first.to_s.include?(manager_ad.strip)
+    emp_obj.manager.first.downcase.to_s.include?(manager_ad.downcase.strip)
+  end
+
+  def update?
+    options = OpenStruct.new
+    OptionParser.new do |opt|
+      opt.banner = "Usage: docker run --rm ldap_sync [options]"
+      opt.on('-u', 'Update Manager') { |o| options.update = o }
+    end.parse!
+    return options.update
   end
 end
 

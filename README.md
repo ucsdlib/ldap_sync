@@ -8,4 +8,5 @@ specific LDAP attributes for Library employees
 ### Docker
 1. Build docker image `docker build -t ldap_sync:latest .`
 1. Run image `docker run --rm ldap_sync`
-1. Run image with environment variables file and write output to a file `docker run --env-file <path_to_environment_variables/ldap_rsync.env> --rm ldap_sync >> <path_to_log_file/ldap_sync.log>
+1. Run image with environment variables file and write output to a file `docker run --env-file <path_to_environment_variables/ldap_rsync.env> --rm ldap_sync -u >> <path_to_log_file/ldap_sync.log>`
+1. Note: add `-u` option if we want to update the manager, otherwise it will only display the data.
