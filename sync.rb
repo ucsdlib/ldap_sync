@@ -1,3 +1,6 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
 require 'bundler/inline'
 
 gemfile do
@@ -11,6 +14,7 @@ end
 require 'rubygems'
 require 'ibm_db'
 require 'net/ldap'
+require 'time'
 
 class User
   def sync_employees
@@ -22,7 +26,7 @@ class User
         if stmt = IBM_DB.exec(@conn, query)
           while row = IBM_DB.fetch_assoc(stmt)
             update_manager(row)
-          end 
+          end
           IBM_DB.free_result(stmt)
         else
           puts "Statement execution failed: #{IBM_DB.stmt_errormsg}"
@@ -87,7 +91,7 @@ class User
     if (emp && !manager_match?(emp,row['MANAGERADNAME']))
       manager_obj = employee(ad_user_name(row['MANAGERADNAME'],row['MANAGEREMAIL']))
       if manager_obj
-        puts "Employee: #{row['USERNAME']} - Change Manager to #{row['MANAGERADNAME']} - whenChanged: #{emp.whenChanged}"
+        puts "#{Time.now} - Employee: #{row['USERNAME']} - Change Manager to #{row['MANAGERADNAME']} - whenChanged: #{emp.whenChanged}"
         @ldap_connection.replace_attribute emp.dn, :manager, manager_obj.dn
         validate_ldap_response
       end
