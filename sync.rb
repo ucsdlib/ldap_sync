@@ -1,3 +1,6 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
 require 'bundler/inline'
 
 gemfile do
@@ -22,7 +25,7 @@ class User
         if stmt = IBM_DB.exec(@conn, query)
           while row = IBM_DB.fetch_assoc(stmt)
             update_manager(row)
-          end 
+          end
           IBM_DB.free_result(stmt)
         else
           puts "Statement execution failed: #{IBM_DB.stmt_errormsg}"

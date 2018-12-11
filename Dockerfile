@@ -8,3 +8,5 @@ ENV PATH="${BUNDLE_BIN}:${PATH}"
 RUN mkdir -p /app
 WORKDIR /app
 COPY . ./
+
+ENTRYPOINT ["./sync.rb"]
