@@ -78,7 +78,7 @@ class User
   end
 
   def update_manager(row, dry_run)
-    return unless !@employees.include?(row['USERNAME'].strip)
+    return unless row['USERNAME'] && !@employees.include?(row['USERNAME'].strip)
     @employees << row['USERNAME'].strip
     emp = employee(ad_user_name(row['USERNAME'],row['USEREMAIL']))
     if (emp && !manager_match?(emp,row['MANAGERADNAME']))
